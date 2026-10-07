@@ -1,0 +1,22 @@
+# ezos v2: the CORE needs NOTHING but a normal Python install.
+# App launching, browser/search, media keys, window control, volume,
+# weather, clipboard, speak, reminders, download, screenshot (via built-in
+# tools) - all work with zero pip installs on Windows.
+#
+# These optional extras only unlock a few specific functions:
+
+psutil          # cpu_usage, ram_usage, battery_status, nicer is_app_running
+pyautogui       # click, move_mouse, scroll  (type_text/press_key/hotkey work without it)
+Pillow          # screenshot (otherwise ezos falls back to pyautogui)
+pyperclip       # nicer clipboard (otherwise ezos uses built-in Windows clip)
+
+# Web research (web_search / read_webpage / research) - recommended for Jarvis:
+ddgs            # DuckDuckGo search, no API key
+beautifulsoup4  # read & clean web page text
+
+# Windows-only, only for set_volume to an EXACT level:
+pycaw
+comtypes
+
+# For REAL-AI Jarvis mode (optional - offline keyword mode works without it):
+# openai        # or any OpenAI-compatible SDK (Groq, Together, local servers)

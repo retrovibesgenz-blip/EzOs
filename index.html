@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ezos Reference</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#161922; --panel2:#1d212c; --border:#2a2f3c;
+    --text:#e6e9ef; --muted:#9aa3b2; --accent:#6ea8fe; --accent2:#3ddc97;
+    --code:#ffd38a; --sig:#f8f8f2; --shadow:0 2px 14px rgba(0,0,0,.35);
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#f5f6f9; --panel:#ffffff; --panel2:#f0f2f6; --border:#e1e4ea;
+      --text:#1a1d24; --muted:#5a6475; --accent:#2563eb; --accent2:#0a8f5b;
+      --code:#a15c00; --sig:#111; --shadow:0 2px 12px rgba(20,30,60,.08);
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.55;-webkit-font-smoothing:antialiased}
+  code,pre,.mono{font-family:"SF Mono",SFMono-Regular,ui-monospace,"Cascadia Code",
+    "Fira Code",Consolas,"Liberation Mono",monospace}
+
+  header{padding:46px 20px 26px;text-align:center;
+    background:radial-gradient(1200px 300px at 50% -40px,rgba(110,168,254,.18),transparent)}
+  .logo{font-size:46px;font-weight:800;letter-spacing:-1px}
+  .logo span{color:var(--accent)}
+  .tag{color:var(--muted);font-size:17px;margin-top:6px}
+  .pills{margin-top:16px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+  .pill{padding:6px 14px;border:1px solid var(--border);border-radius:999px;
+    background:var(--panel);color:var(--muted);font-size:13px}
+  .pill b{color:var(--accent2)}
+
+  .wrap{max-width:1000px;margin:0 auto;padding:0 20px 80px}
+
+  .toolbar{position:sticky;top:0;z-index:5;padding:16px 0 10px;
+    background:linear-gradient(var(--bg),var(--bg) 75%,transparent)}
+  #search{width:100%;padding:14px 16px;font-size:16px;border-radius:12px;
+    border:1px solid var(--border);background:var(--panel);color:var(--text);
+    box-shadow:var(--shadow);outline:none}
+  #search:focus{border-color:var(--accent)}
+  .count{color:var(--muted);font-size:13px;margin-top:8px;text-align:center}
+
+  .cats{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:12px 0 6px}
+  .cats a{font-size:12.5px;color:var(--muted);text-decoration:none;padding:5px 11px;
+    border:1px solid var(--border);border-radius:999px;background:var(--panel);transition:.15s}
+  .cats a:hover{color:var(--accent);border-color:var(--accent)}
+
+  h2.section{font-size:15px;text-transform:uppercase;letter-spacing:1.5px;
+    color:var(--accent2);margin:40px 0 6px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+
+  .fn{background:var(--panel);border:1px solid var(--border);border-radius:14px;
+    padding:16px 18px;margin:13px 0;box-shadow:var(--shadow)}
+  .fn .sig{font-size:15.5px;color:var(--sig);font-weight:600;word-break:break-word}
+  .fn .sig b{color:var(--accent)}
+  .fn .sig .args{color:var(--muted);font-weight:400}
+  .fn .desc{margin:8px 0 11px;color:var(--text)}
+  .fn pre{margin:0;background:var(--panel2);border:1px solid var(--border);
+    border-radius:10px;padding:11px 14px;overflow-x:auto;font-size:13.5px;color:var(--code)}
+  .fn .ret{color:var(--muted);font-size:12.5px;margin-top:9px}
+  .fn .ret b{color:var(--accent2)}
+  .badge{display:inline-block;font-size:11px;padding:1px 7px;border-radius:6px;margin-left:8px;
+    background:var(--panel2);border:1px solid var(--border);color:var(--muted);vertical-align:middle}
+
+  .note{background:var(--panel2);border-left:3px solid var(--accent);border-radius:8px;
+    padding:12px 16px;margin:18px 0;color:var(--muted);font-size:14px}
+  .note b{color:var(--text)}
+  .note code{color:var(--code)}
+  .no-results{text-align:center;color:var(--muted);padding:40px;display:none}
+  footer{text-align:center;color:var(--muted);font-size:13px;padding:30px 20px 60px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">ez<span>os</span></div>
+  <div class="tag">Easy&nbsp;OS &mdash; drive your PC with one-line Python. Build your own Jarvis.</div>
+  <div class="pills">
+    <span class="pill"><b>85</b> commands</span>
+    <span class="pill"><b>OpenAI</b> + <b>Claude</b> tool formats</span>
+    <span class="pill">web research built in</span>
+    <span class="pill">build a <b>Jarvis</b></span>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="toolbar">
+    <input id="search" type="text" placeholder="🔍  Search… (try 'spotify', 'volume', 'window', 'youtube', 'weather')" autocomplete="off">
+    <div class="count" id="count"></div>
+  </div>
+
+  <div class="cats" id="cats"></div>
+
+  <div class="note">
+    <b>Use it:</b> drop <code>ezos.py</code> next to your script, then <code>import ezos</code>.
+    Every action returns <code>{"ok": True/False, "message": ...}</code> so your AI always
+    knows if it worked &mdash; and on failure you now get a visible <code>WARNING ezos: ...</code>.
+    Both <code>ezos.open_app(...)</code> and <code>ezos.openApp(...)</code> work.
+    For a Jarvis, let your LLM call <code>ezos.run("open_app", app_name="spotify")</code> and show it
+    its toolbox with <code>ezos.describe_commands()</code>.
+  </div>
+
+  <div id="list"></div>
+  <div class="no-results" id="noresults">No functions match that search.</div>
+</div>
+
+<footer>ezos v2.0.0 &middot; one file, no setup, built for Windows &middot; made for hackathon Jarvis builders</footer>
+
+<script>
+const FUNCTIONS = [
+  // ---- FILES & FOLDERS ----
+  {c:"Files & Folders", n:"create_file", a:"path, content=''", d:"Create a new file of any type, optionally with text inside.", e:"ezos.create_file('report.md', '# My Report')", r:"dict {ok, message}"},
+  {c:"Files & Folders", n:"read_file", a:"path", d:"Return the full text contents of a file.", e:"text = ezos.read_file('notes.txt')", r:"str"},
+  {c:"Files & Folders", n:"write_file", a:"path, content", d:"Overwrite a file with new text (creates it if missing).", e:"ezos.write_file('log.txt', 'fresh start')", r:"dict"},
+  {c:"Files & Folders", n:"append_file", a:"path, content", d:"Add text to the END of a file without erasing it.", e:"ezos.append_file('log.txt', '\\nnew line')", r:"dict"},
+  {c:"Files & Folders", n:"delete_file", a:"path", d:"Delete a single file.", e:"ezos.delete_file('old.txt')", r:"dict"},
+  {c:"Files & Folders", n:"copy_file", a:"source, destination", d:"Copy a file to another location.", e:"ezos.copy_file('a.png', 'backup/a.png')", r:"dict"},
+  {c:"Files & Folders", n:"move_file", a:"source, destination", d:"Move a file or folder to a new place.", e:"ezos.move_file('a.txt', 'archive/a.txt')", r:"dict"},
+  {c:"Files & Folders", n:"rename_file", a:"path, new_name", d:"Rename a file, keeping it in the same folder.", e:"ezos.rename_file('a.txt', 'b.txt')", r:"dict"},
+  {c:"Files & Folders", n:"file_exists", a:"path", d:"Check whether a file or folder exists.", e:"if ezos.file_exists('data.csv'): ...", r:"bool"},
+  {c:"Files & Folders", n:"list_files", a:"folder='.'", d:"List everything inside a folder.", e:"ezos.list_files('C:/Users')", r:"list[str]"},
+  {c:"Files & Folders", n:"find_file", a:"name, root=None, limit=50", d:"Search for files whose name contains a word (defaults to your home folder).", e:"ezos.find_file('resume')", r:"list[str] (paths)"},
+  {c:"Files & Folders", n:"create_folder", a:"path", d:"Create a folder (and any missing parents).", e:"ezos.create_folder('projects/new')", r:"dict"},
+  {c:"Files & Folders", n:"delete_folder", a:"path", d:"Delete a folder AND everything inside it. Careful!", e:"ezos.delete_folder('temp')", r:"dict"},
+  {c:"Files & Folders", n:"zip_files", a:"output_zip, files", d:"Compress a list of files into one .zip.", e:"ezos.zip_files('out.zip', ['a.txt','b.txt'])", r:"dict"},
+  {c:"Files & Folders", n:"unzip", a:"zip_path, extract_to='.'", d:"Extract everything from a .zip into a folder.", e:"ezos.unzip('out.zip', 'unpacked')", r:"dict"},
+  {c:"Files & Folders", n:"open_file", a:"path", d:"Open a file with its default program.", e:"ezos.open_file('report.pdf')", r:"dict"},
+  {c:"Files & Folders", n:"open_folder", a:"path='.'", d:"Open a folder in File Explorer / Finder.", e:"ezos.open_folder('Downloads')", r:"dict"},
+
+  // ---- APPS & PROCESSES ----
+  {c:"Apps & Processes", n:"open_app", a:"app_name", d:"Launch ANY Start-menu app - Store or desktop. Fixed in v2: Spotify, Zoom, Discord, ChatGPT, Chrome all work.", e:"ezos.open_app('spotify')\nezos.open_app('zoom')\nezos.open_app('discord')", r:"dict {ok, message, resolved}"},
+  {c:"Apps & Processes", n:"close_app", a:"app_name", d:"Force-close an app by name.", e:"ezos.close_app('spotify')", r:"dict"},
+  {c:"Apps & Processes", n:"is_app_running", a:"app_name", d:"True if an app/process is currently running.", e:"ezos.is_app_running('chrome')", r:"bool"},
+  {c:"Apps & Processes", n:"list_running_apps", a:"", d:"List every currently running process name.", e:"ezos.list_running_apps()", r:"list[str]"},
+  {c:"Apps & Processes", n:"run_command", a:"command", d:"Run any shell command and capture its output.", e:"ezos.run_command('ipconfig')", r:"dict {ok, exit_code, output, error}"},
+
+  // ---- BROWSER & WEB ----
+  {c:"Browser & Web", n:"open_browser", a:"url='', browser='default'", d:"Open a page in a SPECIFIC browser. Fixed in v2: 'chrome' really opens Chrome.", e:"ezos.open_browser('github.com', 'chrome')", r:"dict"},
+  {c:"Browser & Web", n:"open_url", a:"url, browser='default'", d:"Open any URL (adds https:// if missing).", e:"ezos.open_url('wikipedia.org', 'firefox')", r:"dict"},
+  {c:"Browser & Web", n:"search_web", a:"query, engine='google', browser='default'", d:"Search the web. Google by default (no more Bing!). engine: google/bing/duckduckgo/youtube/brave.", e:"ezos.search_web('python tips', browser='chrome')", r:"dict"},
+  {c:"Browser & Web", n:"google", a:"query, browser='default'", d:"Shortcut: Google something.", e:"ezos.google('weather today')", r:"dict"},
+  {c:"Browser & Web", n:"search_youtube", a:"query, browser='default'", d:"Open a YouTube search results page.", e:"ezos.search_youtube('lofi beats')", r:"dict"},
+  {c:"Browser & Web", n:"open_website", a:"name, browser='default'", d:"Open a site by nickname (youtube, gmail, github, maps, netflix...) or any URL.", e:"ezos.open_website('gmail')", r:"dict"},
+  {c:"Browser & Web", n:"download_file", a:"url, save_as", d:"Download a file from the internet (no dependencies).", e:"ezos.download_file('https://x.com/a.jpg', 'a.jpg')", r:"dict"},
+  {c:"Browser & Web", n:"weather", a:"city=''", d:"One-line current weather, no API key. Safe to print or speak().", e:"print(ezos.weather('London'))", r:"str"},
+  {c:"Browser & Web", n:"public_ip", a:"", d:"Your public (internet-facing) IP address.", e:"ezos.public_ip()", r:"str"},
+
+  // ---- MEDIA (JARVIS) ----
+  {c:"Media (Jarvis)", n:"play_on_youtube", a:"query", d:"Find the FIRST YouTube result and open that video directly.", e:"ezos.play_on_youtube('bohemian rhapsody')", r:"dict {ok, message, url}"},
+  {c:"Media (Jarvis)", n:"play_on_spotify", a:"query", d:"Open Spotify and search a song/artist (desktop app or web).", e:"ezos.play_on_spotify('daft punk')", r:"dict"},
+  {c:"Media (Jarvis)", n:"play_pause_media", a:"", d:"Press Play/Pause (controls Spotify, YouTube, any player).", e:"ezos.play_pause_media()", r:"dict"},
+  {c:"Media (Jarvis)", n:"next_track", a:"", d:"Skip to the next track.", e:"ezos.next_track()", r:"dict"},
+  {c:"Media (Jarvis)", n:"previous_track", a:"", d:"Go back to the previous track.", e:"ezos.previous_track()", r:"dict"},
+  {c:"Media (Jarvis)", n:"stop_media", a:"", d:"Stop media playback.", e:"ezos.stop_media()", r:"dict"},
+
+  // ---- SYSTEM INFO ----
+  {c:"System Info", n:"system_info", a:"", d:"OS, machine name, CPU count, Python version.", e:"ezos.system_info()", r:"dict"},
+  {c:"System Info", n:"cpu_usage", a:"", d:"Current CPU load as a percentage.", e:"ezos.cpu_usage()", r:"float", dep:"psutil"},
+  {c:"System Info", n:"ram_usage", a:"", d:"Memory total / used / free in GB and percent.", e:"ezos.ram_usage()", r:"dict", dep:"psutil"},
+  {c:"System Info", n:"disk_space", a:"drive=None", d:"Free / used disk space in GB (defaults to C:).", e:"ezos.disk_space('D:/')", r:"dict"},
+  {c:"System Info", n:"battery_status", a:"", d:"Battery percentage and whether it's plugged in.", e:"ezos.battery_status()", r:"dict", dep:"psutil"},
+  {c:"System Info", n:"get_ip", a:"", d:"The computer's hostname and local IP address.", e:"ezos.get_ip()", r:"dict"},
+  {c:"System Info", n:"wifi_name", a:"", d:"The name (SSID) of the Wi-Fi you're connected to.", e:"ezos.wifi_name()", r:"str"},
+  {c:"System Info", n:"current_time", a:"", d:"The current time as HH:MM:SS.", e:"ezos.current_time()", r:"str"},
+  {c:"System Info", n:"current_date", a:"", d:"Today's date as YYYY-MM-DD.", e:"ezos.current_date()", r:"str"},
+
+  // ---- SYSTEM CONTROL ----
+  {c:"System Control", n:"shutdown", a:"delay_seconds=0", d:"Shut down the PC after an optional delay.", e:"ezos.shutdown(60)", r:"dict"},
+  {c:"System Control", n:"restart", a:"delay_seconds=0", d:"Restart the PC after an optional delay.", e:"ezos.restart(30)", r:"dict"},
+  {c:"System Control", n:"cancel_shutdown", a:"", d:"Cancel a scheduled shutdown or restart.", e:"ezos.cancel_shutdown()", r:"dict"},
+  {c:"System Control", n:"lock_screen", a:"", d:"Lock the computer.", e:"ezos.lock_screen()", r:"dict"},
+  {c:"System Control", n:"sleep_pc", a:"", d:"Put the computer to sleep.", e:"ezos.sleep_pc()", r:"dict"},
+  {c:"System Control", n:"empty_recycle_bin", a:"", d:"Empty the Windows Recycle Bin.", e:"ezos.empty_recycle_bin()", r:"dict"},
+  {c:"System Control", n:"set_brightness", a:"level", d:"Set screen brightness 0-100 (laptops).", e:"ezos.set_brightness(70)", r:"dict"},
+
+  // ---- WINDOW MANAGEMENT ----
+  {c:"Window Management", n:"active_window", a:"", d:"Title of the window currently in focus.", e:"ezos.active_window()", r:"str"},
+  {c:"Window Management", n:"minimize_window", a:"", d:"Minimize the focused window.", e:"ezos.minimize_window()", r:"dict"},
+  {c:"Window Management", n:"maximize_window", a:"", d:"Maximize the focused window.", e:"ezos.maximize_window()", r:"dict"},
+  {c:"Window Management", n:"close_window", a:"", d:"Close the focused window (like clicking X).", e:"ezos.close_window()", r:"dict"},
+  {c:"Window Management", n:"show_desktop", a:"", d:"Minimize everything and show the desktop (Win+D).", e:"ezos.show_desktop()", r:"dict"},
+  {c:"Window Management", n:"switch_window", a:"", d:"Switch to the next window (Alt+Tab).", e:"ezos.switch_window()", r:"dict"},
+
+  // ---- CLIPBOARD ----
+  {c:"Clipboard", n:"copy_to_clipboard", a:"text", d:"Put text onto the system clipboard.", e:"ezos.copy_to_clipboard('hello')", r:"dict"},
+  {c:"Clipboard", n:"paste_from_clipboard", a:"", d:"Read whatever text is on the clipboard.", e:"ezos.paste_from_clipboard()", r:"str"},
+
+  // ---- SOUND, SCREEN & WALLPAPER ----
+  {c:"Sound, Screen & Wallpaper", n:"screenshot", a:"save_as='screenshot.png'", d:"Capture the whole screen to a PNG.", e:"ezos.screenshot('shot.png')", r:"dict"},
+  {c:"Sound, Screen & Wallpaper", n:"volume_up", a:"steps=5", d:"Turn system volume up (each step ~2%).", e:"ezos.volume_up(10)", r:"dict"},
+  {c:"Sound, Screen & Wallpaper", n:"volume_down", a:"steps=5", d:"Turn system volume down (each step ~2%).", e:"ezos.volume_down(10)", r:"dict"},
+  {c:"Sound, Screen & Wallpaper", n:"mute", a:"", d:"Toggle mute on or off.", e:"ezos.mute()", r:"dict"},
+  {c:"Sound, Screen & Wallpaper", n:"set_volume", a:"level", d:"Set exact volume 0-100.", e:"ezos.set_volume(40)", r:"dict", dep:"pycaw"},
+  {c:"Sound, Screen & Wallpaper", n:"set_wallpaper", a:"image_path", d:"Change the desktop wallpaper to an image.", e:"ezos.set_wallpaper('bg.jpg')", r:"dict"},
+
+  // ---- KEYBOARD & MOUSE ----
+  {c:"Keyboard & Mouse", n:"type_text", a:"text, interval=0.02", d:"Type text into the focused window (works with zero deps via clipboard fallback).", e:"ezos.type_text('Hello world')", r:"dict"},
+  {c:"Keyboard & Mouse", n:"press_key", a:"key", d:"Press one key: enter, esc, tab, f5, space...", e:"ezos.press_key('enter')", r:"dict"},
+  {c:"Keyboard & Mouse", n:"hotkey", a:"*keys", d:"Press a key combo, e.g. ctrl+c.", e:"ezos.hotkey('ctrl', 'c')", r:"dict"},
+  {c:"Keyboard & Mouse", n:"click", a:"x=None, y=None", d:"Click the mouse (at x,y or where it is).", e:"ezos.click(500, 300)", r:"dict", dep:"pyautogui"},
+  {c:"Keyboard & Mouse", n:"move_mouse", a:"x, y, duration=0.3", d:"Move the cursor to screen coordinates.", e:"ezos.move_mouse(100, 100)", r:"dict", dep:"pyautogui"},
+  {c:"Keyboard & Mouse", n:"scroll", a:"amount", d:"Scroll the wheel: + up, - down.", e:"ezos.scroll(-500)", r:"dict", dep:"pyautogui"},
+
+  // ---- EXTRAS (JARVIS) ----
+  {c:"Extras (Jarvis)", n:"notify", a:"title, message", d:"Show a message box (blocks until dismissed).", e:"ezos.notify('Done', 'Task finished!')", r:"dict"},
+  {c:"Extras (Jarvis)", n:"toast", a:"message, title='ezos'", d:"Non-blocking Windows toast (won't freeze your script).", e:"ezos.toast('Build complete')", r:"dict"},
+  {c:"Extras (Jarvis)", n:"speak", a:"text", d:"Say text out loud with text-to-speech.", e:"ezos.speak('All systems online')", r:"dict"},
+  {c:"Extras (Jarvis)", n:"say_time", a:"", d:"Speak the current time out loud.", e:"ezos.say_time()", r:"dict"},
+  {c:"Extras (Jarvis)", n:"say_date", a:"", d:"Speak today's date out loud.", e:"ezos.say_date()", r:"dict"},
+  {c:"Extras (Jarvis)", n:"reminder", a:"seconds, message, title='Reminder', announce=True", d:"Pop + speak a reminder after N seconds. Non-blocking.", e:"ezos.reminder(600, 'Take a break')", r:"dict"},
+  {c:"Extras (Jarvis)", n:"set_timer", a:"seconds, message='Timer finished!'", d:"A countdown timer that alerts when it ends.", e:"ezos.set_timer(300)", r:"dict"},
+  {c:"Extras (Jarvis)", n:"whatsapp_message", a:"number, message", d:"Open a WhatsApp chat pre-filled with a message (you press Send).", e:"ezos.whatsapp_message('14155550100', 'Hi!')", r:"dict"},
+  {c:"Extras (Jarvis)", n:"wait", a:"seconds", d:"Pause between automation steps.", e:"ezos.wait(2)", r:"dict"},
+
+  // ---- WEB RESEARCH ----
+  {c:"Web Research", n:"web_search", a:"query, max_results=5, region='wt-wt'", d:"Search the web and get results back as data (no browser). Each: {title,url,snippet}.", e:"ezos.web_search('who won the match today')", r:"list[dict]", dep:"ddgs"},
+  {c:"Web Research", n:"read_webpage", a:"url, max_chars=5000", d:"Fetch a page and return clean readable text (HTML stripped).", e:"ezos.read_webpage('https://en.wikipedia.org/wiki/Mars')", r:"str", dep:"beautifulsoup4"},
+  {c:"Web Research", n:"research", a:"query, max_results=3, chars_per_page=1500", d:"Full research: search + open top pages + extract text. Feed 'summary' to your AI.", e:"info = ezos.research('python 3.13 new features')\nprint(info['summary'])", r:"dict {query, sources, summary}", dep:"ddgs + bs4"},
+
+  // ---- AI INTEGRATION ----
+  {c:"AI Integration", n:"aiRead", a:"instructions='', persona=None", d:"Make ONE instruction block for the AI to follow. Pass a command name instead to get that function's own instructions. Stack several and feed them to configure().", e:"ezos.aiRead('Call me boss. Prefer Chrome.')\nezos.aiRead('open_app')   # that function's instructions", r:"str (instruction block)"},
+  {c:"AI Integration", n:"configure", a:"*instructions, persona='Jarvis', provider='openai'", d:"Tells the AI which tools it has (each function + an instruction) plus your rules. Accepts MANY aiRead() blocks. provider='openai' = OpenAI-COMPATIBLE format (OpenAI, Gemini, Z.ai, Groq...).", e:"cfg = ezos.configure(\n  ezos.aiRead('Call me boss.'),\n  ezos.aiRead('Prefer Chrome.'),\n  'Confirm before deleting.',\n)", r:"dict {system_prompt, tools, ...}"},
+  {c:"AI Integration", n:"openai_tools", a:"only=None", d:"ezos commands in the OpenAI-COMPATIBLE tool format (works with OpenAI, Gemini, Z.ai, Groq, local servers via base_url).", e:"tools = ezos.openai_tools()", r:"list[dict]"},
+  {c:"AI Integration", n:"anthropic_tools", a:"only=None", d:"ezos commands as Anthropic (Claude) tools.", e:"tools = ezos.anthropic_tools()", r:"list[dict]"},
+  {c:"AI Integration", n:"execute_tool_call", a:"name, arguments", d:"Run a tool the LLM chose. arguments may be a dict OR a JSON string (as OpenAI sends).", e:"ezos.execute_tool_call('open_app', '{\"app_name\":\"spotify\"}')", r:"dict"},
+  {c:"AI Integration", n:"handle_openai_tool_calls", a:"tool_calls", d:"Execute a batch of OpenAI tool_calls; returns ready-to-append 'tool' messages.", e:"messages += ezos.handle_openai_tool_calls(msg.tool_calls)", r:"list[dict]"},
+  {c:"AI Integration", n:"Jarvis", a:"client=None, model, instructions=[...], ...", d:"Ready-made agent loop. Bring any OpenAI-COMPATIBLE client (OpenAI, Gemini, Z.ai, Groq via base_url); .chat() chains tools for you. instructions accepts a list of aiRead() blocks.", e:"j = ezos.Jarvis(OpenAI(), instructions=[\n  ezos.aiRead('Call me boss.'),\n  ezos.aiRead('Prefer Chrome.')])\nj.chat('open spotify and play daft punk')", r:"Jarvis (class)"},
+  {c:"AI Integration", n:"run", a:"command, **kwargs", d:"Call ANY ezos command by name - perfect for LLM function-calling.", e:"ezos.run('open_app', app_name='spotify')", r:"dict"},
+  {c:"AI Integration", n:"list_commands", a:"", d:"Every command name ezos exposes (show your AI its toolbox).", e:"ezos.list_commands()", r:"list[str]"},
+  {c:"AI Integration", n:"describe_commands", a:"", d:"Name + params + one-line doc for every command.", e:"ezos.describe_commands()", r:"list[dict]"},
+  {c:"AI Integration", n:"explain", a:"command", d:"Detailed help for one command (signature + doc + example).", e:"print(ezos.explain('search_web'))", r:"str"},
+  {c:"AI Integration", n:"help_me", a:"", d:"Print every command grouped, for a human overview.", e:"ezos.help_me()", r:"None (prints)"},
+  {c:"AI Integration", n:"set_verbose", a:"on=True", d:"Toggle the visible 'WARNING ezos: ...' messages on failure.", e:"ezos.set_verbose(False)", r:"None"},
+];
+
+const listEl = document.getElementById('list');
+const countEl = document.getElementById('count');
+const catsEl = document.getElementById('cats');
+const noRes = document.getElementById('noresults');
+const search = document.getElementById('search');
+
+function slug(s){return s.replace(/[^a-z0-9]+/gi,'-').toLowerCase();}
+
+[...new Set(FUNCTIONS.map(f=>f.c))].forEach(cat=>{
+  const a=document.createElement('a');
+  a.textContent=cat; a.href='#'+slug(cat);
+  catsEl.appendChild(a);
+});
+
+function render(filter=""){
+  listEl.innerHTML="";
+  const q=filter.trim().toLowerCase();
+  let shown=0, currentCat=null;
+  FUNCTIONS.forEach(f=>{
+    const hay=(f.n+" "+f.a+" "+f.d+" "+f.c+" "+f.e).toLowerCase();
+    if(q && !hay.includes(q)) return;
+    shown++;
+    if(f.c!==currentCat){
+      currentCat=f.c;
+      const h=document.createElement('h2');
+      h.className="section"; h.id=slug(f.c); h.textContent=f.c;
+      listEl.appendChild(h);
+    }
+    const dep = f.dep ? `<span class="badge">needs ${f.dep}</span>` : "";
+    const div=document.createElement('div');
+    div.className="fn";
+    div.innerHTML=`
+      <div class="sig">ezos.<b>${f.n}</b>(<span class="args">${f.a}</span>)${dep}</div>
+      <div class="desc">${f.d}</div>
+      <pre>${f.e.replace(/</g,'&lt;')}</pre>
+      <div class="ret"><b>returns</b> &rarr; ${f.r}</div>`;
+    listEl.appendChild(div);
+  });
+  noRes.style.display = shown ? "none" : "block";
+  countEl.textContent = q
+    ? `${shown} of ${FUNCTIONS.length} functions match "${filter}"`
+    : `${FUNCTIONS.length} functions across ${new Set(FUNCTIONS.map(f=>f.c)).size} categories`;
+}
+
+search.addEventListener('input', e=>render(e.target.value));
+render();
+</script>
+</body>
+</html>
