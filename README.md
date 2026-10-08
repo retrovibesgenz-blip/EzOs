@@ -13,7 +13,7 @@
 **`ezos`** is a single-file Python library that gives an AI (or you) a simple,
 reliable toolbox to drive the operating system — open apps, control the browser,
 research the web, manage files, control media, and more — with dead-simple
-functions that read like plain English.
+functions that read like plain English.                  You can check our official website on https://ezos.bytovex.app
 
 ```python
 import ezos
