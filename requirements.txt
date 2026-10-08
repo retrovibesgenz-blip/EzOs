@@ -20,3 +20,4 @@ comtypes
 
 # For REAL-AI Jarvis mode (optional - offline keyword mode works without it):
 # openai        # or any OpenAI-compatible SDK (Groq, Together, local servers)
+
