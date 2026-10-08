@@ -78,7 +78,8 @@
   <div class="logo">ez<span>os</span></div>
   <div class="tag">Easy&nbsp;OS &mdash; drive your PC with one-line Python. Build your own Jarvis.</div>
   <div class="pills">
-    <span class="pill"><b>85</b> commands</span>
+    <span class="pill"><b>118</b> commands</span>
+    <span class="pill">give the AI its own <b>cursor</b> 👁️</span>
     <span class="pill"><b>OpenAI</b> + <b>Claude</b> tool formats</span>
     <span class="pill">web research built in</span>
     <span class="pill">build a <b>Jarvis</b></span>
@@ -100,13 +101,19 @@
     Both <code>ezos.open_app(...)</code> and <code>ezos.openApp(...)</code> work.
     For a Jarvis, let your LLM call <code>ezos.run("open_app", app_name="spotify")</code> and show it
     its toolbox with <code>ezos.describe_commands()</code>.
+    <br><br>
+    <b>New &mdash; give the AI its own cursor 👁️:</b> <code>ezos.give_cursor()</code> +
+    <code>ezos.give_keyboard()</code> hand a <b>vision model</b> a screenshot with a labelled
+    coordinate grid (<code>grid_screenshot()</code>) so it can see the screen, move its own mouse and
+    type. Wire it all together with <code>ezos.VisionAgent(OpenAI())</code> and just say
+    <i>"play karan aujla on spotify"</i>.
   </div>
 
   <div id="list"></div>
   <div class="no-results" id="noresults">No functions match that search.</div>
 </div>
 
-<footer>ezos v2.0.0 &middot; one file, no setup, built for Windows &middot; made for hackathon Jarvis builders</footer>
+<footer>ezos v2.1.0 &middot; one file, no setup, built for Windows &middot; made for hackathon Jarvis builders</footer>
 
 <script>
 const FUNCTIONS = [
@@ -199,9 +206,31 @@ const FUNCTIONS = [
   {c:"Keyboard & Mouse", n:"type_text", a:"text, interval=0.02", d:"Type text into the focused window (works with zero deps via clipboard fallback).", e:"ezos.type_text('Hello world')", r:"dict"},
   {c:"Keyboard & Mouse", n:"press_key", a:"key", d:"Press one key: enter, esc, tab, f5, space...", e:"ezos.press_key('enter')", r:"dict"},
   {c:"Keyboard & Mouse", n:"hotkey", a:"*keys", d:"Press a key combo, e.g. ctrl+c.", e:"ezos.hotkey('ctrl', 'c')", r:"dict"},
-  {c:"Keyboard & Mouse", n:"click", a:"x=None, y=None", d:"Click the mouse (at x,y or where it is).", e:"ezos.click(500, 300)", r:"dict", dep:"pyautogui"},
-  {c:"Keyboard & Mouse", n:"move_mouse", a:"x, y, duration=0.3", d:"Move the cursor to screen coordinates.", e:"ezos.move_mouse(100, 100)", r:"dict", dep:"pyautogui"},
-  {c:"Keyboard & Mouse", n:"scroll", a:"amount", d:"Scroll the wheel: + up, - down.", e:"ezos.scroll(-500)", r:"dict", dep:"pyautogui"},
+  {c:"Keyboard & Mouse", n:"click", a:"x=None, y=None", d:"Click the mouse (at x,y or where it is). Zero-dep ctypes fallback on Windows.", e:"ezos.click(500, 300)", r:"dict"},
+  {c:"Keyboard & Mouse", n:"move_mouse", a:"x, y, duration=0.3", d:"Move the cursor to screen coordinates. Works without pyautogui on Windows.", e:"ezos.move_mouse(100, 100)", r:"dict"},
+  {c:"Keyboard & Mouse", n:"scroll", a:"amount", d:"Scroll the wheel: + up, - down.", e:"ezos.scroll(-500)", r:"dict"},
+
+  // ---- VISION & AUTONOMY (AI AGENT) ----
+  {c:"Vision & Autonomy (AI Agent)", n:"give_cursor", a:"spacing=100", d:"Give your AI its OWN mouse. Returns a Cursor with .look() (grid screenshot), .click(x,y), .double_click(), .drag(), .scroll(), .where(). Pair with a vision model so it reads coordinates off the grid and clicks them.", e:"cur = ezos.give_cursor()\nshot = cur.look()      # screenshot + coord grid\ncur.click(840, 460)    # click what it saw", r:"Cursor"},
+  {c:"Vision & Autonomy (AI Agent)", n:"give_keyboard", a:"", d:"Give your AI its OWN keyboard. Returns a Keyboard with .type(text), .press(key), .enter(), .hotkey(*keys).", e:"kb = ezos.give_keyboard()\nkb.type('karan aujla')\nkb.press('enter')", r:"Keyboard"},
+  {c:"Vision & Autonomy (AI Agent)", n:"grid_screenshot", a:"save_as='ezos_vision.png', spacing=100, show_labels=True", d:"The AI's EYES: a screenshot with a labelled x,y coordinate grid drawn on top, so a vision model can read pixel coordinates straight off the picture and aim its cursor.", e:"shot = ezos.grid_screenshot(spacing=100)\n# send shot['path'] to GPT-4o / Gemini", r:"dict {ok, path, width, height, spacing}", dep:"Pillow"},
+  {c:"Vision & Autonomy (AI Agent)", n:"VisionAgent", a:"client, model='gpt-4o', instructions=[...], spacing=100, max_steps=15", d:"The full see -> think -> act loop. Bring any OpenAI-COMPATIBLE vision client; each step it gets a grid screenshot, picks coordinates, and drives its own cursor + keyboard until the task is done. THIS is how you say 'play karan aujla on spotify' and it just happens.", e:"from openai import OpenAI\nagent = ezos.VisionAgent(OpenAI(), model='gpt-4o')\nagent.do('open spotify and play karan aujla')", r:"VisionAgent (class)"},
+  {c:"Vision & Autonomy (AI Agent)", n:"double_click", a:"x=None, y=None", d:"Double-click the mouse (optionally move to x,y first).", e:"ezos.double_click(640, 360)", r:"dict"},
+  {c:"Vision & Autonomy (AI Agent)", n:"right_click", a:"x=None, y=None", d:"Right-click the mouse (optionally move to x,y first).", e:"ezos.right_click(640, 360)", r:"dict"},
+  {c:"Vision & Autonomy (AI Agent)", n:"drag", a:"x1, y1, x2, y2, duration=0.5", d:"Drag the mouse from one point to another with the left button held.", e:"ezos.drag(100, 200, 600, 200)", r:"dict"},
+  {c:"Vision & Autonomy (AI Agent)", n:"mouse_position", a:"", d:"Where the mouse cursor is right now: {x, y}.", e:"ezos.mouse_position()", r:"dict {ok, x, y}"},
+  {c:"Vision & Autonomy (AI Agent)", n:"read_screen", a:"region=None", d:"Read ALL text on screen with OCR - the AI's reading eyes (no vision model needed). Optional (left,top,right,bottom) box.", e:"text = ezos.read_screen()", r:"str", dep:"pytesseract + Tesseract"},
+  {c:"Vision & Autonomy (AI Agent)", n:"find_text_on_screen", a:"text", d:"Find on-screen text via OCR; returns matches with CENTRE x,y ready for click(x,y).", e:"hits = ezos.find_text_on_screen('Save')", r:"list[dict]", dep:"pytesseract + Tesseract"},
+  {c:"Vision & Autonomy (AI Agent)", n:"click_text", a:"text", d:"Find on-screen text and CLICK it - 'click the button that says Save'.", e:"ezos.click_text('Sign in')", r:"dict", dep:"pytesseract + Tesseract"},
+  {c:"Vision & Autonomy (AI Agent)", n:"remember", a:"key, value", d:"Save a fact to the agent's long-term memory (a JSON file that survives restarts).", e:"ezos.remember('owner', 'boss')", r:"dict"},
+  {c:"Vision & Autonomy (AI Agent)", n:"recall", a:"key=None", d:"Recall a saved fact (or the whole memory dict if no key).", e:"ezos.recall('owner')", r:"value / dict"},
+  {c:"Vision & Autonomy (AI Agent)", n:"forget", a:"key", d:"Delete one fact from long-term memory.", e:"ezos.forget('owner')", r:"dict"},
+  {c:"Vision & Autonomy (AI Agent)", n:"listen", a:"timeout=6.0, phrase_limit=12.0", d:"The AI's EARS: listen on the mic and return speech as text. Say it, the agent does it.", e:"cmd = ezos.listen()\n# -> 'play karan aujla on spotify'", r:"str", dep:"SpeechRecognition + pyaudio"},
+  {c:"Vision & Autonomy (AI Agent)", n:"ask_user", a:"question='ezos needs your input:'", d:"Ask the human a question and return their typed answer (human-in-the-loop).", e:"name = ezos.ask_user('What should I call you?')", r:"str"},
+  {c:"Vision & Autonomy (AI Agent)", n:"api_call", a:"url, method='GET', headers=None, json_body=None, params=None, timeout=20", d:"Call ANY web API and get JSON back - give your agent the whole internet. Dependency-free.", e:"ezos.api_call('https://api.github.com/repos/python/cpython')", r:"dict {ok, status, data}"},
+  {c:"Vision & Autonomy (AI Agent)", n:"run_python", a:"code", d:"Let the AI write and run its own Python (ezos is available inside), output captured. Powerful - run only trusted code.", e:"ezos.run_python(\"import ezos; ezos.open_app('spotify')\")", r:"dict {ok, output}"},
+  {c:"Vision & Autonomy (AI Agent)", n:"every", a:"seconds, command, args=None", d:"Run an ezos command on a repeat, in the background. Returns a handle with .stop().", e:"job = ezos.every(60, 'battery_status')\n# ... later ...\njob.stop()", r:"_RepeatTask (has .stop())"},
+  {c:"Vision & Autonomy (AI Agent)", n:"send_email", a:"to, subject, body, *, smtp_host, username, password, smtp_port=587", d:"Send an email over SMTP (stdlib, no pip install). Use an app password.", e:"ezos.send_email('a@b.com','hi','sent by my agent',\n  smtp_host='smtp.gmail.com', username='me@gmail.com', password=APP_PW)", r:"dict"},
 
   // ---- EXTRAS (JARVIS) ----
   {c:"Extras (Jarvis)", n:"notify", a:"title, message", d:"Show a message box (blocks until dismissed).", e:"ezos.notify('Done', 'Task finished!')", r:"dict"},
