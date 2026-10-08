@@ -56,7 +56,7 @@ import urllib.request
 import urllib.parse
 from urllib.parse import quote_plus, quote
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 IS_WINDOWS = platform.system() == "Windows"
 IS_MAC = platform.system() == "Darwin"
@@ -1191,11 +1191,24 @@ def hotkey(*keys: str) -> dict:
 
 
 def click(x: int | None = None, y: int | None = None) -> dict:
-    """Click the mouse. With no coordinates, clicks where it is now."""
+    """Click the mouse. With no coordinates, clicks where it is now.
+
+    Uses pyautogui if installed, otherwise a dependency-free ctypes fallback on
+    Windows - so the AI can click out of the box.
+    """
     try:
-        pyautogui = _need("pyautogui")
-        pyautogui.click() if x is None or y is None else pyautogui.click(x, y)
-        return _ok("Clicked")
+        pg = _pyautogui_or_none()
+        if pg:
+            pg.click() if x is None or y is None else pg.click(x, y)
+            return _ok("Clicked")
+        if IS_WINDOWS:
+            import ctypes
+            if x is not None and y is not None:
+                ctypes.windll.user32.SetCursorPos(int(x), int(y))
+            ctypes.windll.user32.mouse_event(_MOUSE_LEFT_DOWN, 0, 0, 0, 0)
+            ctypes.windll.user32.mouse_event(_MOUSE_LEFT_UP, 0, 0, 0, 0)
+            return _ok("Clicked")
+        return _fail("click needs:  pip install pyautogui")
     except Exception as e:
         return _fail(f"click failed: {e}")
 
@@ -1203,9 +1216,15 @@ def click(x: int | None = None, y: int | None = None) -> dict:
 def move_mouse(x: int, y: int, duration: float = 0.3) -> dict:
     """Move the mouse cursor to screen coordinates (x, y)."""
     try:
-        pyautogui = _need("pyautogui")
-        pyautogui.moveTo(x, y, duration=duration)
-        return _ok(f"Moved mouse to ({x}, {y})")
+        pg = _pyautogui_or_none()
+        if pg:
+            pg.moveTo(x, y, duration=duration)
+            return _ok(f"Moved mouse to ({x}, {y})")
+        if IS_WINDOWS:
+            import ctypes
+            ctypes.windll.user32.SetCursorPos(int(x), int(y))
+            return _ok(f"Moved mouse to ({x}, {y})")
+        return _fail("move_mouse needs:  pip install pyautogui")
     except Exception as e:
         return _fail(f"move_mouse failed: {e}")
 
@@ -1213,11 +1232,719 @@ def move_mouse(x: int, y: int, duration: float = 0.3) -> dict:
 def scroll(amount: int) -> dict:
     """Scroll the mouse wheel. Positive = up, negative = down."""
     try:
-        pyautogui = _need("pyautogui")
-        pyautogui.scroll(amount)
-        return _ok(f"Scrolled {amount}")
+        pg = _pyautogui_or_none()
+        if pg:
+            pg.scroll(amount)
+            return _ok(f"Scrolled {amount}")
+        if IS_WINDOWS:
+            import ctypes
+            ctypes.windll.user32.mouse_event(0x0800, 0, 0, int(amount), 0)
+            return _ok(f"Scrolled {amount}")
+        return _fail("scroll needs:  pip install pyautogui")
     except Exception as e:
         return _fail(f"scroll failed: {e}")
+
+
+# ===========================================================================
+# 10b. VISION + CURSOR + KEYBOARD   (give the AI its own eyes & hands)
+# ---------------------------------------------------------------------------
+# This is what turns ezos from "run commands" into a real computer-using agent:
+#   * grid_screenshot() -> a screenshot with a labelled coordinate grid, so a
+#     VISION model can read pixel coordinates straight off the picture.
+#   * give_cursor() / give_keyboard() -> hand the AI its own mouse & keyboard.
+#   * VisionAgent -> a full see -> think -> act loop: the model looks at the
+#     screen, decides, moves the cursor, clicks and types, then looks again.
+# ===========================================================================
+
+# mouse_event flags for the ctypes fallback (zero pip installs on Windows)
+_MOUSE_LEFT_DOWN, _MOUSE_LEFT_UP = 0x0002, 0x0004
+_MOUSE_RIGHT_DOWN, _MOUSE_RIGHT_UP = 0x0008, 0x0010
+
+
+def _pyautogui_or_none():
+    """Return pyautogui if it's installed (fail-safe off), else None."""
+    try:
+        import pyautogui
+        pyautogui.FAILSAFE = False
+        return pyautogui
+    except Exception:
+        return None
+
+
+def _screen_size() -> tuple:
+    """(width, height) of the primary screen - dependency-free on Windows."""
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        user32.SetProcessDPIAware()
+        return int(user32.GetSystemMetrics(0)), int(user32.GetSystemMetrics(1))
+    except Exception:
+        pg = _pyautogui_or_none()
+        if pg:
+            size = pg.size()
+            return int(size[0]), int(size[1])
+        return (1920, 1080)
+
+
+def _capture():
+    """Grab the screen as a PIL image, or None if nothing can capture it."""
+    try:
+        import ctypes
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+    try:
+        from PIL import ImageGrab
+        return ImageGrab.grab()
+    except Exception:
+        pg = _pyautogui_or_none()
+        if pg:
+            try:
+                return pg.screenshot()
+            except Exception:
+                return None
+        return None
+
+
+def grid_screenshot(save_as: str = "ezos_vision.png", spacing: int = 100,
+                    show_labels: bool = True) -> dict:
+    """Screenshot the screen with a labelled coordinate grid drawn on top.
+
+    This is the AI's EYES. Hand the saved image to a vision model (GPT-4o,
+    Gemini, Claude...) and it can read the x,y numbers off the grid, then
+    click/move to those exact coordinates with its cursor.
+
+        shot = ezos.grid_screenshot(spacing=100)
+        # -> {ok, path, width, height, spacing} ; send shot['path'] to the AI
+
+    Needs Pillow for the grid (pip install Pillow). Without it you still get a
+    plain screenshot so nothing breaks.
+    """
+    img = _capture()
+    if img is None:
+        return _fail("grid_screenshot needs Pillow or pyautogui:  pip install Pillow")
+    try:
+        from PIL import ImageDraw, ImageFont
+    except Exception:
+        try:
+            img.convert("RGB").save(save_as)
+        except Exception as e:
+            return _fail(f"grid_screenshot failed: {e}")
+        return _ok(f"Saved plain screenshot (install Pillow for the grid) to "
+                   f"'{os.path.abspath(save_as)}'", path=os.path.abspath(save_as),
+                   width=img.size[0], height=img.size[1], spacing=spacing, grid=False)
+    try:
+        img = img.convert("RGB")
+        w, h = img.size
+        draw = ImageDraw.Draw(img)
+        try:
+            font = ImageFont.truetype("arial.ttf", 12)
+        except Exception:
+            font = ImageFont.load_default()
+        line = (255, 0, 0)
+        for x in range(0, w, spacing):
+            draw.line([(x, 0), (x, h)], fill=line, width=1)
+        for y in range(0, h, spacing):
+            draw.line([(0, y), (w, y)], fill=line, width=1)
+        if show_labels:
+            for x in range(0, w, spacing):
+                for y in range(0, h, spacing):
+                    tag = f"{x},{y}"
+                    draw.rectangle([x + 1, y + 1, x + 2 + 6 * len(tag), y + 13],
+                                   fill=(0, 0, 0))
+                    draw.text((x + 2, y + 1), tag, fill=(255, 255, 0), font=font)
+        img.save(save_as)
+    except Exception as e:
+        return _fail(f"grid_screenshot failed: {e}")
+    return _ok(f"Saved grid screenshot to '{os.path.abspath(save_as)}'",
+               path=os.path.abspath(save_as), width=w, height=h,
+               spacing=spacing, grid=True)
+
+
+def double_click(x: int | None = None, y: int | None = None) -> dict:
+    """Double-click the mouse (optionally move to x,y first)."""
+    pg = _pyautogui_or_none()
+    try:
+        if pg:
+            pg.doubleClick() if x is None or y is None else pg.doubleClick(x, y)
+            return _ok("Double-clicked")
+        if IS_WINDOWS:
+            import ctypes
+            if x is not None and y is not None:
+                ctypes.windll.user32.SetCursorPos(int(x), int(y))
+            for _ in range(2):
+                ctypes.windll.user32.mouse_event(_MOUSE_LEFT_DOWN, 0, 0, 0, 0)
+                ctypes.windll.user32.mouse_event(_MOUSE_LEFT_UP, 0, 0, 0, 0)
+            return _ok("Double-clicked")
+        return _fail("double_click needs:  pip install pyautogui")
+    except Exception as e:
+        return _fail(f"double_click failed: {e}")
+
+
+def right_click(x: int | None = None, y: int | None = None) -> dict:
+    """Right-click the mouse (optionally move to x,y first)."""
+    pg = _pyautogui_or_none()
+    try:
+        if pg:
+            pg.rightClick() if x is None or y is None else pg.rightClick(x, y)
+            return _ok("Right-clicked")
+        if IS_WINDOWS:
+            import ctypes
+            if x is not None and y is not None:
+                ctypes.windll.user32.SetCursorPos(int(x), int(y))
+            ctypes.windll.user32.mouse_event(_MOUSE_RIGHT_DOWN, 0, 0, 0, 0)
+            ctypes.windll.user32.mouse_event(_MOUSE_RIGHT_UP, 0, 0, 0, 0)
+            return _ok("Right-clicked")
+        return _fail("right_click needs:  pip install pyautogui")
+    except Exception as e:
+        return _fail(f"right_click failed: {e}")
+
+
+def drag(x1: int, y1: int, x2: int, y2: int, duration: float = 0.5) -> dict:
+    """Drag the mouse from (x1,y1) to (x2,y2) with the left button held."""
+    pg = _pyautogui_or_none()
+    try:
+        if pg:
+            pg.moveTo(x1, y1)
+            pg.dragTo(x2, y2, duration=duration, button="left")
+            return _ok(f"Dragged ({x1},{y1}) -> ({x2},{y2})")
+        if IS_WINDOWS:
+            import ctypes
+            u = ctypes.windll.user32
+            u.SetCursorPos(int(x1), int(y1))
+            u.mouse_event(_MOUSE_LEFT_DOWN, 0, 0, 0, 0)
+            time.sleep(max(0.0, duration))
+            u.SetCursorPos(int(x2), int(y2))
+            u.mouse_event(_MOUSE_LEFT_UP, 0, 0, 0, 0)
+            return _ok(f"Dragged ({x1},{y1}) -> ({x2},{y2})")
+        return _fail("drag needs:  pip install pyautogui")
+    except Exception as e:
+        return _fail(f"drag failed: {e}")
+
+
+def mouse_position() -> dict:
+    """Where the mouse cursor is right now: {ok, x, y}."""
+    pg = _pyautogui_or_none()
+    try:
+        if pg:
+            px, py = pg.position()
+            return _ok(f"Mouse at ({int(px)}, {int(py)})", x=int(px), y=int(py))
+        if IS_WINDOWS:
+            import ctypes
+
+            class _P(ctypes.Structure):
+                _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+            pt = _P()
+            ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
+            return _ok(f"Mouse at ({pt.x}, {pt.y})", x=int(pt.x), y=int(pt.y))
+        return _fail("mouse_position needs:  pip install pyautogui")
+    except Exception as e:
+        return _fail(f"mouse_position failed: {e}")
+
+
+def read_screen(region: tuple | None = None) -> str:
+    """Read ALL the text currently visible on screen (OCR). The AI's reading eyes.
+
+    Lets an agent KNOW what's on screen without a vision model. Pass an optional
+    (left, top, right, bottom) box to read just part of the screen.
+    Needs:  pip install pytesseract Pillow  + the Tesseract engine
+    (Windows: https://github.com/UB-Mannheim/tesseract/wiki).
+    """
+    img = _capture()
+    if img is None:
+        _fail("read_screen needs Pillow:  pip install Pillow pytesseract")
+        return ""
+    try:
+        import pytesseract
+    except Exception:
+        _fail("read_screen needs:  pip install pytesseract  (+ the Tesseract engine)")
+        return ""
+    try:
+        if region:
+            img = img.crop(tuple(region))
+        return pytesseract.image_to_string(img).strip()
+    except Exception as e:
+        _fail(f"read_screen failed: {e}")
+        return ""
+
+
+def find_text_on_screen(text: str) -> list:
+    """Find on-screen text and return where it is: [{text, x, y, width, height}].
+
+    x,y is the CENTRE of the matched word - feed it straight to click(x, y).
+    Needs:  pip install pytesseract Pillow  + the Tesseract engine.
+    """
+    img = _capture()
+    if img is None:
+        _fail("find_text_on_screen needs Pillow:  pip install Pillow pytesseract")
+        return []
+    try:
+        import pytesseract
+        from pytesseract import Output
+    except Exception:
+        _fail("find_text_on_screen needs:  pip install pytesseract  (+ the engine)")
+        return []
+    try:
+        data = pytesseract.image_to_data(img, output_type=Output.DICT)
+        hits, want = [], text.lower().strip()
+        for i, word in enumerate(data["text"]):
+            if want and want in (word or "").lower().strip():
+                x, y = data["left"][i], data["top"][i]
+                w, h = data["width"][i], data["height"][i]
+                hits.append({"text": word, "x": int(x + w / 2),
+                             "y": int(y + h / 2), "width": int(w), "height": int(h)})
+        return hits
+    except Exception as e:
+        _fail(f"find_text_on_screen failed: {e}")
+        return []
+
+
+def click_text(text: str) -> dict:
+    """Find on-screen text and CLICK it. 'click the button that says Save'.
+
+    Needs:  pip install pytesseract Pillow  + the Tesseract engine.
+    """
+    hits = find_text_on_screen(text)
+    if not hits:
+        return _fail(f"Couldn't find '{text}' on screen")
+    target = hits[0]
+    click(target["x"], target["y"])
+    return _ok(f"Clicked '{text}' at ({target['x']}, {target['y']})",
+               x=target["x"], y=target["y"], matches=len(hits))
+
+
+# ---- persistent agent memory (survives restarts, zero dependencies) --------
+_MEMORY_PATH = os.path.join(os.path.expanduser("~"), ".ezos_memory.json")
+
+
+def _load_memory() -> dict:
+    try:
+        with open(_MEMORY_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_memory(mem: dict) -> None:
+    with open(_MEMORY_PATH, "w", encoding="utf-8") as f:
+        json.dump(mem, f, indent=2, default=str)
+
+
+def remember(key: str, value: str) -> dict:
+    """Save a fact to the agent's long-term memory (survives restarts).
+
+        ezos.remember("owner_name", "boss")
+        ezos.remember("favourite_artist", "Karan Aujla")
+    """
+    try:
+        mem = _load_memory()
+        mem[key] = value
+        _save_memory(mem)
+        return _ok(f"Remembered '{key}'", key=key, value=value)
+    except Exception as e:
+        return _fail(f"remember failed: {e}")
+
+
+def recall(key: str | None = None):
+    """Recall a saved fact by key (or the WHOLE memory dict if no key given)."""
+    mem = _load_memory()
+    return mem if key is None else mem.get(key)
+
+
+def forget(key: str) -> dict:
+    """Delete one fact from the agent's long-term memory."""
+    try:
+        mem = _load_memory()
+        if key not in mem:
+            return _fail(f"No memory named '{key}'")
+        mem.pop(key, None)
+        _save_memory(mem)
+        return _ok(f"Forgot '{key}'", key=key)
+    except Exception as e:
+        return _fail(f"forget failed: {e}")
+
+
+def ask_user(question: str = "ezos needs your input:") -> str:
+    """Ask the human a question and return their typed answer (human-in-the-loop)."""
+    try:
+        return input(f"{question} ")
+    except Exception as e:
+        _fail(f"ask_user failed: {e}")
+        return ""
+
+
+def listen(timeout: float = 6.0, phrase_limit: float = 12.0) -> str:
+    """Listen on the microphone and return what was said as text. The AI's EARS.
+
+    Say "play karan aujla on spotify" and it comes back as a string you can hand
+    straight to a Jarvis / VisionAgent.
+    Needs:  pip install SpeechRecognition pyaudio   (free Google STT, a mic).
+    """
+    try:
+        import speech_recognition as sr
+    except Exception:
+        _fail("listen needs:  pip install SpeechRecognition pyaudio")
+        return ""
+    try:
+        r = sr.Recognizer()
+        with sr.Microphone() as source:
+            r.adjust_for_ambient_noise(source, duration=0.4)
+            audio = r.listen(source, timeout=timeout, phrase_time_limit=phrase_limit)
+        return r.recognize_google(audio)
+    except Exception as e:
+        _fail(f"listen failed: {e}")
+        return ""
+
+
+def api_call(url: str, method: str = "GET", headers: dict | None = None,
+             json_body: dict | None = None, params: dict | None = None,
+             timeout: int = 20) -> dict:
+    """Call ANY web API and get the JSON (or text) back. Dependency-free.
+
+    Lets your agent use the whole internet - weather, GitHub, your own backend,
+    an LLM endpoint, anything.
+
+        ezos.api_call("https://api.github.com/repos/python/cpython")
+        ezos.api_call("https://httpbin.org/post", method="POST",
+                      json_body={"hello": "world"})
+    """
+    try:
+        if params:
+            url = url + ("&" if "?" in url else "?") + urllib.parse.urlencode(params)
+        hdrs = {"User-Agent": "ezos", "Accept": "application/json"}
+        if headers:
+            hdrs.update(headers)
+        data = None
+        if json_body is not None:
+            data = json.dumps(json_body).encode("utf-8")
+            hdrs.setdefault("Content-Type", "application/json")
+        req = urllib.request.Request(url, data=data, headers=hdrs,
+                                     method=method.upper())
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8", "replace")
+            status = resp.getcode()
+        try:
+            body = json.loads(raw)
+        except Exception:
+            body = raw
+        return _ok(f"{method.upper()} {url} -> {status}", status=status, data=body)
+    except Exception as e:
+        return _fail(f"api_call failed: {e}")
+
+
+def run_python(code: str) -> dict:
+    """Run a snippet of Python the AI wrote and capture its output.
+
+    The snippet shares this process and has `ezos` available, so an agent can
+    compose its own multi-step actions on the fly. Powerful - only run code you
+    (or an AI you trust) produced.
+
+        ezos.run_python("import ezos; ezos.open_app('spotify')")
+    """
+    import io
+    import contextlib
+    buf = io.StringIO()
+    env = {"ezos": sys.modules[__name__], "__name__": "__ezos_snippet__"}
+    try:
+        with contextlib.redirect_stdout(buf):
+            exec(code, env)
+        return _ok("Ran python snippet", output=buf.getvalue())
+    except Exception as e:
+        return _fail(f"run_python error: {e}", output=buf.getvalue())
+
+
+class _RepeatTask:
+    """Handle for a repeating background task. Call .stop() to end it."""
+
+    def __init__(self, interval: float, command: str, kwargs: dict):
+        self._stop = threading.Event()
+        self.command = command
+        self.interval = interval
+
+        def _loop():
+            while not self._stop.wait(interval):
+                try:
+                    run(command, **kwargs)
+                except Exception as e:
+                    _fail(f"every('{command}') tick failed: {e}")
+
+        self._thread = threading.Thread(target=_loop, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> dict:
+        self._stop.set()
+        return _ok(f"Stopped repeating '{self.command}'")
+
+    def __repr__(self):
+        return f"<ezos repeating '{self.command}' every {self.interval}s>"
+
+
+def every(seconds: float, command: str, args: dict | None = None) -> _RepeatTask:
+    """Run an ezos command on a repeat, in the background. Returns a handle.
+
+        job = ezos.every(60, "battery_status")          # check every minute
+        job = ezos.every(5, "play_pause_media")          # with no args
+        job = ezos.every(30, "set_volume", {"level": 20})
+        ...
+        job.stop()                                       # when you're done
+    """
+    return _RepeatTask(seconds, command, args or {})
+
+
+def send_email(to: str, subject: str, body: str, *, smtp_host: str,
+               username: str, password: str, smtp_port: int = 587,
+               use_tls: bool = True, sender: str | None = None) -> dict:
+    """Send an email via SMTP (stdlib, no pip install). Use an app password.
+
+        ezos.send_email("friend@x.com", "hi", "sent by my agent",
+                        smtp_host="smtp.gmail.com", username="me@gmail.com",
+                        password=GMAIL_APP_PASSWORD)
+    """
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        msg = MIMEText(body)
+        msg["Subject"] = subject
+        msg["From"] = sender or username
+        msg["To"] = to
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as s:
+            if use_tls:
+                s.starttls()
+            s.login(username, password)
+            s.send_message(msg)
+        return _ok(f"Email sent to {to}")
+    except Exception as e:
+        return _fail(f"send_email failed: {e}")
+
+
+class Cursor:
+    """The AI's own mouse. Get one with ezos.give_cursor().
+
+        cur = ezos.give_cursor()
+        cur.look()                 # grid screenshot to show the vision model
+        cur.click(840, 460)        # click the coordinate it chose
+    """
+
+    def __init__(self, spacing: int = 100):
+        self.spacing = spacing
+        self.width, self.height = _screen_size()
+
+    def look(self, save_as: str = "ezos_vision.png", spacing: int | None = None) -> dict:
+        """Take a grid screenshot (what the AI sees before it acts)."""
+        return grid_screenshot(save_as, spacing or self.spacing)
+
+    def move(self, x, y, duration: float = 0.3):
+        return move_mouse(x, y, duration)
+
+    def click(self, x=None, y=None):
+        return click(x, y)
+
+    def double_click(self, x=None, y=None):
+        return double_click(x, y)
+
+    def right_click(self, x=None, y=None):
+        return right_click(x, y)
+
+    def drag(self, x1, y1, x2, y2, duration: float = 0.5):
+        return drag(x1, y1, x2, y2, duration)
+
+    def scroll(self, amount):
+        return scroll(amount)
+
+    def where(self):
+        return mouse_position()
+
+    def __repr__(self):
+        return f"<ezos.Cursor screen {self.width}x{self.height}, grid {self.spacing}px>"
+
+
+class Keyboard:
+    """The AI's own keyboard. Get one with ezos.give_keyboard().
+
+        kb = ezos.give_keyboard()
+        kb.type("karan aujla")
+        kb.press("enter")
+        kb.hotkey("ctrl", "a")
+    """
+
+    def type(self, text: str, interval: float = 0.02):
+        return type_text(text, interval)
+
+    def press(self, key: str):
+        return press_key(key)
+
+    def enter(self):
+        return press_key("enter")
+
+    def hotkey(self, *keys: str):
+        return hotkey(*keys)
+
+    def shortcut(self, *keys: str):
+        return hotkey(*keys)
+
+    def __repr__(self):
+        return "<ezos.Keyboard>"
+
+
+_CURSOR_GRANTED = False
+_KEYBOARD_GRANTED = False
+
+
+def give_cursor(spacing: int = 100) -> Cursor:
+    """Give your AI its OWN mouse cursor.
+
+    Pair it with grid_screenshot() (or cur.look()) so a vision model can see the
+    screen, read the coordinate grid, and move/click to any point it wants:
+
+        cur = ezos.give_cursor()
+        shot = cur.look()                 # screenshot + coordinate grid
+        # the vision model reads the grid, picks (840, 460) = the search bar...
+        cur.click(840, 460)
+
+    Returns a Cursor you can also drive by hand.
+    """
+    global _CURSOR_GRANTED
+    _CURSOR_GRANTED = True
+    w, h = _screen_size()
+    if VERBOSE:
+        print(f"ezos: cursor granted - the AI can now move & click "
+              f"(screen {w}x{h}, grid every {spacing}px)")
+    return Cursor(spacing)
+
+
+def give_keyboard() -> Keyboard:
+    """Give your AI its OWN keyboard (type text, press keys, hit shortcuts).
+
+        kb = ezos.give_keyboard()
+        kb.type("lofi hip hop"); kb.press("enter")
+    """
+    global _KEYBOARD_GRANTED
+    _KEYBOARD_GRANTED = True
+    if VERBOSE:
+        print("ezos: keyboard granted - the AI can now type & press keys")
+    return Keyboard()
+
+
+# Tools the VisionAgent is allowed to use (its eyes, hands + a few shortcuts).
+_VISION_TOOLS = [
+    "grid_screenshot", "click", "double_click", "right_click", "move_mouse",
+    "drag", "scroll", "mouse_position", "type_text", "press_key", "hotkey",
+    "open_app", "close_app", "search_web", "play_on_spotify", "play_on_youtube",
+    "read_screen", "click_text", "find_text_on_screen", "wait", "speak",
+    "remember", "recall",
+]
+
+_VISION_RULES = (
+    "You are a computer-using agent. You control the screen with your OWN mouse "
+    "and keyboard through ezos tools.\n"
+    "EVERY step you are shown a fresh screenshot with a red coordinate grid; the "
+    "yellow 'x,y' labels are pixel coordinates. To act on something, read its "
+    "coordinate off the grid and call click(x=.., y=..) / double_click / "
+    "move_mouse, then type_text / press_key as needed.\n"
+    "Work ONE action at a time, then look at the next screenshot to check the "
+    "result. Open apps with open_app('name'). To type in a field, click it "
+    "first, then type_text('...'). When the task is fully done, reply with a "
+    "short sentence that starts with DONE and make no tool call.\n"
+)
+
+
+def _data_uri(path: str) -> str:
+    """Read an image file into a base64 data: URI for vision models."""
+    import base64
+    with open(path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("ascii")
+    return f"data:image/png;base64,{b64}"
+
+
+class VisionAgent:
+    """A full see -> think -> act loop: the AI gets its own eyes, cursor and
+    keyboard and completes on-screen tasks for you.
+
+    Bring an OpenAI-COMPATIBLE *vision* client (GPT-4o, Gemini, GLM-4V, a local
+    LLaVA server...). Then just tell it what to do:
+
+        from openai import OpenAI
+        import ezos
+
+        agent = ezos.VisionAgent(OpenAI(), model="gpt-4o")
+        agent.do("open spotify and play karan aujla")
+
+    Under the hood, each step: grid_screenshot() -> send the image to the model
+    -> the model calls click/type/etc. with coordinates it read off the grid ->
+    repeat until it replies DONE.
+    """
+
+    def __init__(self, client, model: str = "gpt-4o", instructions=None,
+                 spacing: int = 100, max_steps: int = 15, persona: str = "Jarvis",
+                 speak_replies: bool = False, tools: list | None = None):
+        if client is None:
+            raise RuntimeError("VisionAgent needs an OpenAI-compatible vision "
+                               "client, e.g. ezos.VisionAgent(OpenAI()).")
+        self.client = client
+        self.model = model
+        self.spacing = spacing
+        self.max_steps = max_steps
+        self.speak_replies = speak_replies
+        self.width, self.height = _screen_size()
+        if instructions is None:
+            instructions = []
+        if isinstance(instructions, str):
+            instructions = [instructions]
+        blocks = _collect_blocks(instructions)
+        system = [_BASE_PERSONA.format(persona=persona), _VISION_RULES,
+                  f"The screen is {self.width}x{self.height} pixels.",
+                  f"The coordinate grid is drawn every {spacing} pixels."]
+        if blocks:
+            system += ["", "YOUR INSTRUCTIONS:", *(f"- {b}" for b in blocks)]
+        self.system_prompt = "\n".join(system)
+        self.tools = openai_tools(only=tools or _VISION_TOOLS)
+        self.messages = [{"role": "system", "content": self.system_prompt}]
+
+    def _trim_old_images(self) -> None:
+        """Keep only the newest screenshot so context stays small and cheap."""
+        imgs = [m for m in self.messages
+                if m.get("role") == "user" and isinstance(m.get("content"), list)]
+        for m in imgs[:-1]:
+            m["content"] = [c for c in m["content"]
+                            if isinstance(c, dict) and c.get("type") == "text"]
+
+    def _attach_screen(self, note: str) -> None:
+        shot = grid_screenshot("ezos_vision.png", spacing=self.spacing)
+        content = [{"type": "text", "text": note}]
+        if shot.get("ok") and shot.get("path"):
+            try:
+                content.append({"type": "image_url",
+                                "image_url": {"url": _data_uri(shot["path"])}})
+            except Exception:
+                pass
+        self.messages.append({"role": "user", "content": content})
+
+    def do(self, task: str) -> str:
+        """Carry out an on-screen task described in plain language."""
+        self.messages.append({"role": "user", "content": f"TASK: {task}"})
+        last = ""
+        for step in range(self.max_steps):
+            self._trim_old_images()
+            self._attach_screen(
+                f"Screen now (step {step + 1}/{self.max_steps}). Take the next "
+                f"single action, or reply DONE when the task is complete.")
+            resp = self.client.chat.completions.create(
+                model=self.model, messages=self.messages, tools=self.tools)
+            msg = resp.choices[0].message
+            if not getattr(msg, "tool_calls", None):
+                last = msg.content or ""
+                self.messages.append({"role": "assistant", "content": last})
+                if self.speak_replies and last:
+                    speak(last)
+                return last
+            self.messages.append(msg)
+            self.messages += handle_openai_tool_calls(msg.tool_calls)
+            time.sleep(0.4)  # let the UI react before the next screenshot
+        return last or "(stopped: too many steps)"
+
+    # friendly alias so it reads like Jarvis
+    chat = do
 
 
 # ===========================================================================
@@ -1345,7 +2072,8 @@ def wait(seconds: float) -> dict:
 # ===========================================================================
 _META = {"set_verbose", "run", "list_commands", "describe_commands", "help_me",
          "openai_tools", "anthropic_tools", "execute_tool_call",
-         "handle_openai_tool_calls", "ai_read", "configure", "explain", "Jarvis"}
+         "handle_openai_tool_calls", "ai_read", "configure", "explain", "Jarvis",
+         "give_cursor", "give_keyboard", "VisionAgent"}
 
 
 def _primary_commands() -> dict[str, types.FunctionType]:
@@ -1863,6 +2591,14 @@ volumeUp = volume_up;               volumeDown = volume_down
 setVolume = set_volume;             setWallpaper = set_wallpaper
 typeText = type_text;               pressKey = press_key
 moveMouse = move_mouse
+giveCursor = give_cursor;           giveKeyboard = give_keyboard
+gridScreenshot = grid_screenshot
+doubleClick = double_click;         rightClick = right_click
+mousePosition = mouse_position
+readScreen = read_screen;           findTextOnScreen = find_text_on_screen
+clickText = click_text;             askUser = ask_user
+apiCall = api_call;                 runPython = run_python
+sendEmail = send_email
 sayTime = say_time;                 sayDate = say_date
 setTimer = set_timer;               whatsappMessage = whatsapp_message
 listCommands = list_commands;        describeCommands = describe_commands
